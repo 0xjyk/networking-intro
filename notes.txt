@@ -134,6 +134,6 @@ Open Questions
 --------------
 
 1. Why does getaddrinfo() return a linked list of addrinfo's as opposed to just a single
-   filled out addrinfo? 
+   filled out addrinfo? - cause there can be many IP addresses assoicated to a single request
 
 
