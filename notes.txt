@@ -127,6 +127,298 @@ status = getaddrinfo("www.example.net", "3490", &hints, &servinfo);
 
 // etc. 
 
+Note: Got back to this after a few days so started back from the start
+
+* getaddrinfo() *
+getaddrinfo() is responsible for performing a DNS and service name lookup
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+
+int getaddrinfo(const char *node,       // e.g. "www.example.com" or IP
+                const char *service,    // eg. "http" or port number 
+                const struct addrinfo *hints, 
+                struct addrinfo **res); 
+
+the `node` parameter is the host name to connect to, or an IP address. 
+
+the `service` parameter can either be a port number (e.g. 80) or the 
+name of a particular service (found in /etc/service e.g. "http" or "ftp")
+
+the `hints` parameter points to a struct addrinfo that you've already 
+filled out with relevant information 
+
+Sample call [Just setup] - 
+
+int status; 
+struct addrinfo hints; 
+struct addrinfo *servinfo;      // will point to the results
+
+memset(&hints, 0, sizeof hints); // ensure the struct is empty
+hints.ai_family = AF_UNSPEC // don't care IPv4 or IPv6
+hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
+hints.ai_flags = AI_PASSIVE;    // fill in my IP for me
+
+if ((status = getaddrinfo(NULL, "3490", &hints, &servinfo)) != 0) {
+    fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status)); 
+    exit(1); 
+}
+
+// servinfo now points to a linked list of 1 or more struct addrinfos
+
+// ... do everything until you don't need servinfo anymore .... 
+
+freeaddrinfo(servinfo); // free the linked-list
+
+* socket() * 
+
+#include <sys/types.h>
+#include <sys/socket.h>
+
+int socket(int domain, int type, int protocol);
+
+the `domain` lets you choose IPv4 or IPv6 or more? 
+the `type` lets you choose between stream or datagram
+the `protocol` lets you choose the protocol get TCP or UDP
+
+int s; 
+struct addrinfo hints, *res; 
+
+// do the lookup 
+// [pretend we already filled out the "hints" struct]
+getaddrinfo("www.example.com" "http", &hints, &res);
+
+s = socket(res->ai_family, res->ai_socktype, res->ai_protocol); 
+
+`socket()` simply returns a socket descriptor (a type of file descriptor)
+that you can use in later system calls, or -1 on error.
+
+* bind() *
+
+once you have a socket you might have to associate that socket with a port 
+on your local machine (this is typically done if you want to listen() for 
+incomming connection on a specific port). The port number is used by the 
+kernel to match an incoming packet to a certain process's socket descriptor.
+
+#include <sys/types.h>
+#include <sys/socket.h>
+
+int bind(int sockfd, struct sockaddr *my_addr, int addlen); 
+
+`sockfd` is the socket file descriptor returned by socket(). 
+`my_addr` is a pointer to a struct sockaddr that contains 
+information about your address, namely, port and IP address.
+`addrlen` is the length in bytes of the address. 
+
+struct addrinfo hints, *res; 
+int sockfd; 
+
+// first, load up address structs with getaddrinfo(): 
+memset(&hints, 0, sizeof hints); 
+hints.ai_family = AF_UNSPEC; // use IPv4 or IPv6, whichever
+hints.ai_socktype = SOCK_STREAM; 
+hints.ai_flags = AI_PASSIVE; // fill in my IP for me
+
+getaddrinfo(NULL, "3490", &hints, &res); 
+
+// make a socket: 
+
+sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol); 
+
+// bind it to the port we passed in to getaddrinfo(): 
+
+bind(sockfd, res->ai_addr, res->ai_addrlen); 
+
+* connect() *
+#include <sys/types.h>
+#include <sys/socket.h>
+
+int connect(int sockfd, struct sockaddr *serv_addr, int addrlen);
+
+`sockfd` is the socket descriptor returned by socket().
+`serv_addr` is a `struct sockaddr` containing the destination port 
+and IP address. 
+`addrlen` is the length in bytes of the server address structure
+
+struct addrinfo hints, *res; 
+int sockfd; 
+
+// first, load up address structs with getaddrinfo(): 
+
+memset(&hints, 0, sizeof hints); 
+hints.ai_family = AF_UNSPEC; 
+hints.ai_socktype = SOCK_STREAM; 
+
+getaddrinfo("www.example.com", "3490", &hints, &res); 
+
+// make a socket: 
+
+sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol); 
+
+// connect! 
+
+connect(sockfd, res->ai_addr, res->ai_addrlen); 
+
+Notice that we didn't call bind(), it's not that we don't require a 
+local port number but rather that we don't can what the value of the 
+port number is. So we let the kernel (via connect) assign us a port
+number.
+
+* listen() *
+
+`listen` allows you to wait for incomming connections. 
+
+int listen(int sockfd, int backlog); 
+
+`sockfd` is the socket descriptor returned by socket()
+`backlog` is the number of connections allowed on the incomming queue 
+
+getaddrinfo();  // use to fill in details of your IP address
+socket();       // use to create the interface
+bind();         // bind the your address & port number to the socket 
+listen();       // listen for incomming connection requests 
+
+* accept() *
+
+someone far far away will try to connect() to your machine on a port you 
+are listen()ing on. Their connection will be queued up waiting to be 
+accepted()ed. You call accept() and you tell it to get the pending 
+connection. It'll return to you a brand new socket file descriptor to use
+for this single connection. Now, you have two socket file descriptors. The
+original one is still listening for more new connections, and the newly 
+created on is ready to send() and recv(). 
+
+#include <sys/types.h>
+#include <sys/socket.h>
+
+int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+`sockfd` is the socket descriptor returned by socket()
+`addr` will usually be a pointer to a local struct sockaddr_storage
+This is where the information about the incoming connection will go.
+You can use this to identify (IP + port no.) the calling host. 
+`addrlen` is a local integer variable that should be set to 
+sizeof (struct sockaddr_storage) before its address is passed to 
+accept(). accept() will not put more than that many bytes into addr.
+If it puts fewer in, it'll change the value of addrlen to reflect that.
+
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h> 
+
+#define MYPORT "3490"
+#define BACKLOG 10
+
+int main(void) {
+    struct sockaddr_storage their_addr;
+    socklen_t addr_size; 
+    struct addrinfo hints *res; 
+    int sockfd, new_fd; 
+
+    // !! don't forget your error checking for these calls !!
+
+    // first, load up address structs with getaddrinfo(): 
+
+    memset(&hints, 0, sizeof hints); 
+    hints.ai_family = AF_UNSPEC;    // use IPv4 or IPv6, whichever
+    hints.ai_socktype = SOCK_STREAM; 
+    hints.ai_flags = AI_PASSIVE;    // fill in my IP for me 
+
+    getaddrinfo(NULL, MYPORT, &hints, &res); 
+
+    // make a socket, bind it, and listen on it: 
+    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol); 
+    bind(sockfd, res->ai_addr, res->ai_addrlen); 
+    listen(sockfd, BACKLOG); 
+
+    // now accept an incoming connection: 
+
+    addr_size = sizeof their_addr; 
+    new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size); 
+
+    // ready to communicate on socket descriptor new_fd!
+    
+    // .....
+}
+
+* send() & recv() *
+These two methods can be used to communicate over stream sockets or connected 
+datagrams sockets. Both methods are blocking 
+
+int send(int sockfd, const void *msg, int len, int flags); 
+`sockfd` is the socket descriptor you want to send data to 
+`msg` is a pointer to the data 
+`len` is the length of the data in bytes    
+`flags` ? 
+
+char *msg = "Yellow"; 
+int len, bytes_send;
+
+len = strlen(msg); 
+bytes_send = send(sockfd, msg, len, 0);
+
+send() returns the number of bytes actually sent out - this might be less than 
+the number you told it to send. Usually as long as this is <1k bytes it should be
+able to send the entire data.
+
+int recv(int sockfd, void *buf, int len, int flags); 
+`sockfd` is the socket descriptor to read from 
+`buf` is the buffer to read the information into 
+`len` is the max length of the buffer 
+`flags` ? 
+
+recv() returns the number of bytes actually read into the buffer or -1 on error 
+When recv returns 0 it is an indication that the other side has closed the 
+connection. 
+
+int sendto(int sockfd, const void *msg, int len, unsigned int flags, 
+            const struct sockaddr *to, socklen_t tolen); 
+
+* sendto() & recvfrom() * 
+
+int sendto(int sockfd, const void *msg, int len, unsigned int flags, 
+            const struct sockaddr *to, socklen_t tolen); 
+this call is basically the same as send() with the addition of two other
+pieces of information. 
+`to` is a pointer to a struct sockaddr (which will probably be another
+struct sockaddr_in or struct sockaddr_in6 or struct sockaddr_storage)
+that you cast at the last minute) which contain the destination IP 
+address and port no.
+`tolen` can simply be set to sizeof *to or sizeof(struct sockaddr_storage)
+
+you can get the destination address by either calling getaddrinfo(), 
+or from recvfrom() or just fill it out by hand. 
+
+Just like send(), sendto() returns the number of bytes actually send (which, 
+again, might be less than the number of bytes you told it to send!) 
+
+recvfrom()
+
+int recvfrom(int sockfd, void *buf, int len, unsigned int flags, 
+            struct sockaddr *from, int *fromlen);
+`from` is a pointer to a logical struct sockaddr_storage that will be filled 
+with IP address and port of the originating machine. 
+`fromlen` is a pointer to a local int that should be initialized to sizeof *from
+or sizeof(struct sockaddr_storage). 
+When the funciton returns, fromlen will contain the length of the address 
+acutally stored in from. 
+
+sendto() & recvfrom() return the number of bytes sent/received, or -1 on error. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
