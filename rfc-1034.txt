@@ -1,0 +1,325 @@
+
+Domain names - concepts and facilities
+--------------------------------------
+
+2.2. DNS design goals 
+  - The primary goal is a consistent name space which will be used for 
+    referring to resources.
+  - The sheer size of the database and frequency of updates suggests 
+    that it must be maintained in a distributed manner, with local 
+    caching to improve performance. The same principal holds for the 
+    structure of the name space, and in particular mechanisms for 
+    creating and deleting names; these should also be distributed. 
+  - Where there are tradeoffs between the cost of acquiring data, the 
+    speed of updates, and the accuracy of caches, the source of the 
+    data should control the tradeoff.
+  - The name server transaction should be independent of the 
+    communications system that carries them.
+  - The domain system defines procedures for accessing the data and 
+    for referrals to other name servers. The domain system also 
+    defines procedures for caching retrieved data and for periodic 
+    refreshing of data defined by the system administrator.
+
+2.3. Assumptions about usage
+  - Access to information is more critical than instantaneous updates 
+    or guarantees of consistency. Hence the update process allows updates
+    to percolate out through the users of the domain system rather than 
+    guaranteeing that all copies are simultaneously updated. When updates 
+    are unavailable due to network or host failure, the usual course is to 
+    believe old information while continuing efforts to update it. The 
+    general model is that copies are distributed with timeouts for 
+    refreshing. The distributor sets the timeout value and the recipient 
+    of the distribution is responsible for performing the refresh. In 
+    special situations, very short intervals can be specified, or the owner 
+    can prohibit copies.
+  - In any system that has a distributed database, a particular name server
+    may be presented with a query that can only be answered by some other 
+    server. The two general approaches to dealing with this problem are 
+    "recursive", in which the first server pursues the query for the client
+    at another server, and "iterative", in which the server refers the client 
+    to another server and lets the client pursue the query. Both approaches 
+    have advantages and disadvantages, but the iterative approach is 
+    preferred for the datagram style of access. The domain system requires 
+    implementation of the iterative approach, but allows the recursive 
+    approach as an option. 
+  - The domain system assumes that all data originates in master files 
+    scattered through the hosts that use the domain system. These master 
+    files are updated by local system administrators. Master files are text 
+    files that are read by a local name server, and hence become available 
+    through the name servers to users of the domain system. The user programs
+    access name servers through standard programs called resolvers. 
+  - An organisation (that isn't a name server) can maintain the master files 
+    locally using a text editor, transfer them to a foreign host which runs 
+    a name server, and then arrange with the system adiministrator of the 
+    name server to get the files loaded. 
+
+  The system administrators provide: 
+    - The definition of zone boundaries. 
+    - Master files of data.
+    - Updates to master files.
+    - Statements of the refresh policies desired. 
+  The domain system provides: 
+    - Standard formats for resource data. 
+    - Standard methods for querying the database. 
+    - Standard methods for name servers to refresh local data from 
+      foreign name servers.
+
+2.4. Elements of the DNS 
+The DNS has three major components: 
+  - DOMAIN NAME SPACE and RESOURCE RECORDS, which are specifications for 
+    a tree structured name space and data associated with the names. 
+    Conceptually, each node and leaf of the domain name space tree names 
+    a set of information. Query operations are attempts to extract specific
+    types of information form a particulr set. A query names the domain name
+    of interest and describes the type of resource information that is 
+    desired. For example, the Interent uses some of its domain names to 
+    identify hosts; queries for address resources return Internet host 
+    addresses.
+  - NAME SERVERS are server programs which hold information about the 
+    domain tree's structure and set information. A name server may cache 
+    structure or set information about any part of the domain tree, but in
+    general a particular name server, has complete information about a 
+    subset of the domain space, and pointers to other name server that can
+    be used to lead to information from any part of the domain tree. Name 
+    servers know the parts of the domain tree for which they have complete 
+    information; a name server is said to be an AUTHORITY for these parts 
+    of the name space. Authoritative information is orgainised into units 
+    called ZONEs, and these zones can be automatically distributed to the 
+    name servers which provide redundant service for the data in a zone.
+  - RESOLVERS are programs that extract information from name servers in 
+    response to client requests. Resolvers must be able to access at 
+    least one name server and use that name server's information to answer
+    a query directly, or pursue the query using referrals to other name 
+    servers. A resolver will typically be a system routine that is directly
+    accessible to user programs; hence no protocol is necessary between 
+    the resolver and the user program.
+  
+These three components roughly correspond to the three layers or view 
+of the domain system: 
+  - From the user's point of view, the domain system is acessed through 
+    a simple procedure or OS call to a local resolver. The domain space
+    consists of a single tree and the user can request information form 
+    any section of the tree. 
+  - From the resolver's point of view, the domain system is composed of 
+    an unknown number of name servers. Each name server has one or more 
+    pieces of the whole domain tree's data, but the resolver views each 
+    of these databases as essentially static. 
+  - From a name server's point of view, the domain system consists of 
+    separate sets of local information called zones. The name server 
+    has local copies of some of the zones. The name server must 
+    periodically refresh its zones from master copies in local files or 
+    foreign name servers. The name server must concurrently process 
+    queries that arrive from resolvers. 
+  In the interest of performance, implementations may couple these 
+  functions. For example, a resolver on the same machine as a name server
+  might share a database consisting of the zones managed by the name 
+  server and the cache managed by the resolver. 
+
+3. DOMAIN NAME SPACE and RESOURCE RECORDS  
+
+3.6. Resource Records
+A domain name identifies a node. Each node has a set of resource information, 
+which may be empty. The set of resource information associated with a 
+paritcular name is composed of separate resource records (RRs). The order of 
+RRs in a set is not significant, and need not be preserved by name servers, 
+resolvers, or other parts of the DNS. 
+
+When we talk about a specifc RR, we assume it has the following: 
+
+owner   the domain name where the RR is found. 
+
+type    an encoded 16 bit value that specifies the type of the resource in 
+        this resource record. Types refer to abstract resources. 
+
+        A       a host address.
+
+        CNAME   identifies the canonical name of an alias.
+
+        HINFO   identifies the CPU and OS used by a host.
+
+        MX      identifies a main exchange for the domain. [RFC-974]
+
+        NS      the authoritative name server for the domain.
+
+        PTR     a pointer to another part of the domain name space.
+
+        SOA     identifies the start of a zone of authority
+class   an encoded 16 bit value which identifies a protocol family or 
+        instance of a protocol.
+        
+        IN      the Internet system.
+
+        CH      the Chaos system.
+TTL     which is the time to live of the RR. This field is a 32 bit 
+        integer in units of seconds, is primarily used by resolvers 
+        when they cache RRs. The TTL describes how long a RR can be
+        cached before it should be discarded. 
+
+RDATA   the type and sometimes class dependent data which describes
+        the resource:
+
+        A       for the IN class, a 32 bit IP address (possibly 128
+                for IPv6).
+                
+                for the CH class, a domain name followed by a 16 bit 
+                octal Chaos address. 
+        
+        CNAME   a domain name.
+
+        MX      a 16 bit preference value (lower is better) followed 
+                by a host name willing to act as a mail exchange for 
+                the owner domain.
+        
+        NS      a host name. 
+
+        PTR     a domain name. 
+
+        SOA     several fields.
+
+3.7. Queries
+Queries are messages which may be sent to a name server to provoke a 
+response. In the Internet, queries are carried in UDP datagrams or over
+TCP connections. The response by the name server either answers the 
+question posed in the query, refers the requester to another set of name
+servers, or signals some error condition.
+
+DNS queries and responses are carried in a standard message format. The
+message format has a header containing a number of fixed fields which 
+are always present, and four sections which carry query parameters and RRs.
+
+The most important field in the header is a four bit field called an opcode
+which separates different queries. Of the possible 16 values, one (standard
+query) is part of the official protocol, two (inverse query and status query)
+are options, one (completion) is obsolete, and the rest are unassigned. 
+
+The four sections are: 
+
+Question    Carries the query name and other query parameters. 
+
+Answer      Carries RRs which directly answer the query. 
+
+Authority   Carries RRs which describe other authoritative servers. 
+            May optionally carry the SOA RR for the authoritative
+            data in the answer section.
+
+Additional  Carries RRs which may be helpful in using the RRs in the
+            other sections.
+
+Note that the content, but not the format, of these sections varies with 
+header opcode.
+
+3.7.1. Standard queries
+A standard query specifies a target domain name (QNAME), query type (QTYPE), 
+and query class (QCLASS) and asks for RRs which match. 
+
+3.7.2. Inverse queries (Optional)
+Name servers may also support inverse queries that map a particular resource
+to a domain name or domain names that have that resource. For example, while 
+a standard query might map a domain name to a SOA RR, the corresponding 
+inverse query might map the SOA RR back to the domain name. 
+
+4. NAME SERVERS
+
+4.1. Introduction
+Name servers are the repositories of information that make up the domain database.
+The database is divided up into sections called zones, which are distributed 
+among the name servers. While name servers can have several optional functions and
+sources of data, the essential task of a name server is to answer queries using 
+data in its zones. By design, name servers can answer queries in a simple answer; 
+the response can always be generated using only local data, and either contains the 
+answer to the question or a referral to other name servers "closer" to the desired 
+information. 
+
+A given zone will be available form several name servers to insure its availability 
+in spite of host or communication link failure. A given name server will typically 
+support one or more zones, but this gives it authoritative information about only 
+a small section of the domain tree. It may also have some cached non-authoritative 
+data about other parts of the tree. The name server marks its response to queries 
+so that the requester can tell whether the response comes from authoritative data 
+or not. 
+
+4.2. How the database is divided into zones 
+The domain database is partitioned in two ways: by class, and by "cuts" made in the
+name space between nodes. 
+
+The class partition is simple. The database for any class is organised, delegated, 
+and maintained separately from all other classes. Since, by convention, the name 
+spaces are the same for all classes, the separate classes can be thought of an an
+array of parallel namespace trees. Note that the data attached to nodes will be 
+different for these different parallel classes. The most common reasons for creating
+a new class are the necessity for a new data format for existing types or desire 
+for a separately managed version of the existing name space. 
+
+Witin a class, "cuts" in the same name space can be made between any two adjacent 
+nodes. After all cuts are made, each group of a connected name space is a separate 
+zone. The zone is said to be authoritative for all names in the connected region. 
+Note that the "cuts" in the name space may be in different places for different 
+classes, the name servers may be different, etc. 
+
+These rules mean that every zone has at least one node, and hence domain name, 
+for which it is authoritative, and all of the nodes in a particular zone are 
+connected. Given, the tree structure, every zone has a hightest node which is closer
+to the root than any other node in the zone. The name of this node is often used to
+identify the zone.
+
+The database is partitioned at points where a particular organization wants to take
+over control of a subtree. Once an organization controls its own zone it can 
+unilaterally change the data in the zone, grow new tree sections connected to the 
+zone, delete existing nodes, or delegate new subzones under its zone. 
+
+4.2.1. Technical considerations 
+The data that describes a zone has four major parts: 
+  - Authoritative data for all nodes within the zone. 
+  - Data that defines the top node of the zone (can be thought of a part of the 
+    the authoritative data). 
+  - Data that describes delegated subzones, i.e., cuts around the bottom of the 
+    zone.
+  - Data that allows access to name servers for subzones (sometimes called 
+    "glue" data). 
+
+All of this data is expressed in the form of RRs, so a zone can be completely 
+described in terms of a set of RRs. Whole zones can be transferred between 
+name servers by transferring the RRs, either carried in a series of messages 
+or by FTPing a master file which is a textual representation. 
+
+One of the goals of the zone structure is that any zone can have all the data 
+required to set up communication with the name servers for any subzones. That 
+is, parent zones have all the information needed to access servers for their 
+children zones. The NS RRs that name the servers for subzones are often not 
+enough for this task since they name the servers, but do not give their 
+addresses. In particular, if the name of the name server is itself in the 
+subzone, we could be faced with the situation where the NS RRs tell us that 
+in order to learn a name server's address, we should contact the server using 
+the address we wish to learn. To fix this problem, a zone contains "glue" RRs 
+which are not part of the autoritative data, and are address RRs for the servers. 
+These RRs are only necessary if the name server's name is "below" the cut, and 
+are only used as part of a referral response. 
+
+
+
+Open Questions
+--------------
+  1. The rfc mentions that iterative resolution is preferred for datagram 
+     style of access. Is this cause its assuming an unreliable connection?
+     Thus prioritising a quick response to avoid retransmission? 
+
+  2. Kind of a bizzare question but what is "www"? How does it fit into DNS?
+     What is Tim-Berners-Lee's contribution to the internet? Read the rfc!
+
+  3. What's the best way to handle cache invalidation in the context of 
+     DNS resolver? - Probably compute the expiry via the current time 
+     and TTL and update the entry the next time you check the entry? 
+
+  4. MX records have a 16 bit preference value in the RDATA field. What does
+     this data quantify?
+
+  5. What is the Chaos system? 
+
+  6. In reference to dns queries the document mentioned "the QCLASS=* construct
+     requires special interpretation regarding authority. Since a particular 
+     name server may not know all of the classes available in the domain system, 
+     it can never know if it is authoritative for all classes. Hence responses to
+     QCLASS=* queries can never be authoritative". Could you expand on why this is
+     the case? Maybe with an example? Isn't the list of classes well defined? 
+
+  7. How do you locate name servers willing to service your DNS requests (recursively)?
