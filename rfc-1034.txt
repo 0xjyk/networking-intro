@@ -323,3 +323,8 @@ Open Questions
      the case? Maybe with an example? Isn't the list of classes well defined? 
 
   7. How do you locate name servers willing to service your DNS requests (recursively)?
+
+Unrealted Questions
+-------------------
+  1. What happens to the TCP connection when I switch IP addresses (i.e. move from wifi to 
+     cellular? 
